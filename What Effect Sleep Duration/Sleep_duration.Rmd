@@ -1,0 +1,930 @@
+---
+title: FE418 Proje
+author: Kadir Yurdakul - 202301112
+date: "`r Sys.Date()`"   
+output:
+  html_document:
+    toc: true
+    toc_float: true
+    toc_depth: 2
+    number_sections: false
+    code_folding: show
+    css: renk.css
+---
+
+# Functions
+
+```{r}
+check_fun <- function(parameter) {
+  
+  unique_length <- length(unique(parameter))
+  
+  parameter_length <- length(parameter)
+  
+  if (parameter_length == unique_length) {
+    print(paste("Parameter length is equal to the number of unique values.", parameter_length, " = ", unique_length))
+  } else {
+    print(paste("Parameter length is not equal to the number of unique values.", parameter_length, " != ", unique_length))
+  }
+  
+  if (all(!duplicated(parameter))) {
+    print("The parameter does not contain duplicated values.")
+  } else {
+    print(paste("The parameter contains duplicated values.", length(duplicated(parameter)), "times"))
+  }
+}
+
+```
+
+```{r}
+custom_summary <- function(data) {
+  mean_val <- mean(data, na.rm = TRUE)
+  median_val <- median(data, na.rm = TRUE)
+  mode_val <- as.numeric(names(sort(-table(data)))[1])
+  var_val <- var(data, na.rm = TRUE)
+  sd_val <- sd(data, na.rm = TRUE)
+  min_val <- min(data, na.rm = TRUE)
+  max_val <- max(data, na.rm = TRUE)
+  range_val <- max(data, na.rm = TRUE) - min(data, na.rm = TRUE)
+  q1 <- quantile(data, na.rm = TRUE)[2]
+  q3 <- quantile(data, na.rm = TRUE)[4]
+  iqr_val <- q3 - q1
+  skewness_val <- skewness(data, na.rm = TRUE)
+  kurtosis_val <- kurtosis(data, na.rm = TRUE)
+  
+  summary_result <- list(
+    "Mean" = mean_val,
+    "Median" = median_val,
+    "Mode" = mode_val,
+    "Variance" = var_val,
+    "Standard Deviation" = sd_val,
+    "Minimum" = min_val,
+    "Maximum" = max_val,
+    "Range" = range_val,
+    "1st Quartile" = q1,
+    "3rd Quartile" = q3,
+    "Interquartile Range" = iqr_val,
+    "Skewness" = skewness_val,
+    "Kurtosis" = kurtosis_val
+  )
+  
+  return(summary_result)
+}
+
+```
+
+```{r}
+roman_to_int <- function(roman) {
+  roman_numerals <- list(
+    "0" = 0, 
+    I = 1,
+    V = 5,
+    X = 10
+  )
+  
+  total <- 0
+  prev_value <- 0
+  
+  for (char in rev(strsplit(roman, "")[[1]])) {
+    value <- roman_numerals[[char]]
+    if (value >= prev_value) {
+      total <- total + value
+    } else {
+      total <- total - value
+    }
+    prev_value <- value
+  }
+  
+  return(total)
+}
+
+```
+
+# Loading the Libraries
+
+```{r message=FALSE, warning=FALSE}
+library(dplyr)
+library(ggplot2)
+library(Amelia)
+library(ggcorrplot)
+library(tidyr)
+library(ggtext)
+library(e1071)
+
+```
+
+# Data examine n' import
+
+```{r}
+
+myfile <- list.files("data/", pattern = "\\.csv$", full.names = TRUE)
+data_list <- lapply(myfile, read.csv);remove(myfile)
+# We can access any data by data_list[[number]]
+```
+
+# Hypothesis 1: is sleep difficulty effect on sleep duration
+
+## Data Check and Cleaning
+
+```{r}
+sleepdata <- data.frame(data_list[[1]]) # Assign the first set of data in data_list to a data frame called sleepdata.
+
+```
+
+```{r}
+unique(sleepdata$sleep_difficulty)
+
+sleepdata$sleep_difficulty <- gsub(paste("es", "yes", sep = "|"), "1", sleepdata$sleep_difficulty)
+
+sleepdata$sleep_difficulty <- gsub(paste("no", "noo", "o", sep = "|"), "0", sleepdata$sleep_difficulty)
+
+sleepdata$sleep_difficulty <- as.numeric(sleepdata$sleep_difficulty)
+
+sleepdata$sleep_difficulty[sleepdata$sleep_difficulty == ""] <- NA
+
+unique(sleepdata$sleep_difficulty)
+```
+
+
+```{r}
+filtered_values <- sleepdata$sleep_duration[sleepdata$sleep_duration > 24 & !is.na(sleepdata$sleep_duration)]
+sleepdata$sleep_duration[sleepdata$sleep_duration > 24 & !is.na(sleepdata$sleep_duration)] <- filtered_values * 0.1
+remove(filtered_values)
+
+unique(sleepdata$night_wakes)
+
+sleepdata <- na.omit(sleepdata) 
+head(sleepdata)
+```
+
+
+## Data Discription
+
+```{r}
+check_fun(sleepdata$ID)
+```
+
+```{r}
+custom_summary(sleepdata$sleep_duration)
+```
+
+```{r}
+qqnorm(sleepdata$sleep_duration)
+qqline(sleepdata$sleep_duration)
+
+```
+
+```{r}
+sum(sleepdata$sleep_difficulty[sleepdata$sleep_difficulty == 1])
+sum(sleepdata$sleep_difficulty[sleepdata$sleep_difficulty == 0])
+
+```
+
+```{r,warning=FALSE}
+ks.test(sleepdata$sleep_duration, "pnorm", mean = mean(sleepdata$sleep_duration), sd = sd(sleepdata$sleep_duration))
+
+shapiro.test(sample(1:length(sleepdata$ID),4999))
+
+```
+
+
+```{r}
+hist(sleepdata$sleep_duration, main = "Sleep Duration Histogram", xlab = "Duration", ylab = "Frequency", breaks = seq(1, 20, 1))
+
+```
+
+```{r}
+barplot(table(sleepdata$sleep_duration),
+        main = "Sleep Duration Frequency",
+        xlab = "Sleep Duration",
+        ylab = "Frequency",
+        col = "lightblue",
+        border = "blue")
+
+```
+
+```{r}
+boxplot(sleepdata$sleep_duration)
+```
+
+
+## Data Comparison
+
+```{r, warning=FALSE}
+t_test_result <- t.test(sleepdata$sleep_duration ~ sleepdata$sleep_difficulty)
+t_test_result;remove(t_test_result)
+
+```
+
+```{r}
+
+corrplot::corrplot(cor(sleepdata[, sapply(sleepdata, is.numeric)], use = "complete.obs"),
+                   method = "circle", type = "upper", order = "hclust", 
+         addCoef.col = "black", tl.col = "black", tl.srt = 45, 
+         diag = FALSE)
+```
+
+```{r}
+model <- lm(sleep_duration ~ night_wakes + sleep_difficulty, data = sleepdata)
+  summary(model)
+
+```
+
+```{r}
+sleepdata %>% ggplot(aes(sleep_duration, night_wakes, colour = sleep_difficulty)) +
+  geom_point()+ 
+  geom_smooth(method = "lm", se = FALSE, aes(group = sleep_difficulty)) 
+```
+
+
+```{r}
+ggplot(sleepdata, aes(x = factor(sleep_difficulty), y = sleep_duration, colour = sleep_difficulty)) +
+  geom_boxplot(fill = "skyblue") +
+  labs(title = "Sleep Duration by Sleep Difficulty", x = "Sleep Difficulty", y = "Sleep Duration") +
+  scale_x_discrete(labels = c("0" = "Easy to Sleep", "1" = "Hard to Sleep"))
+
+```
+
+# Hypothesis 2: smoking effect on night wakes
+
+## Data check n' cleaning
+
+```{r}
+socio <- data.frame(data_list[[2]])
+socio <- left_join(socio, sleepdata)
+socio <- socio %>% select(ID, smoke, sleep_difficulty)
+```
+
+```{r}
+socio$smoke <- gsub("no", 0, socio$smoke)
+socio$smoke <- gsub("past", 1, socio$smoke)
+socio$smoke <- gsub("yes", 2, socio$smoke)
+socio$smoke <- as.numeric(socio$smoke)
+socio <- na.omit(socio)
+head(socio)
+```
+
+## Data discription 
+
+```{r}
+check_fun(socio$ID)
+```
+
+
+```{r}
+paste("num of smoking situation 0 is", sum(socio$smoke == 0, na.rm = T))
+paste("num of smoking situation 1 is", sum(socio$smoke == 1, na.rm = T))
+paste("num of smoking situation 2 is", sum(socio$smoke == 2, na.rm = T))
+```
+
+```{r}
+paste("num of people has not sleep difficulty", sum(socio$sleep_difficulty == 0, na.rm = T))
+paste("num of people has sleep difficulty", sum(socio$sleep_difficulty == 1, na.rm = T))
+
+```
+
+```{r}
+smoke_percentage <- mean(socio$smoke > 0) * 100
+cat("Sigara ienlerin yzdesi:", smoke_percentage, "%\n")
+
+sleep_difficulty_percentage <- mean(socio$sleep_difficulty > 0) * 100
+cat("Uyku gülüğü çekenlerin yzdesi:", sleep_difficulty_percentage, "%\n")
+
+both_count <- sum(socio$ smoke > 0 & socio$sleep_difficulty > 0)
+cat("Hem sigara iip hem de uyku gçl ekenlerin sayısı:", both_count, "\n")
+
+```
+
+
+```{r}
+table(socio$smoke, socio$sleep_difficulty)
+```
+
+
+
+```{r,warning=FALSE}
+ggplot(socio, aes(x = smoke)) +
+  geom_bar() +
+  labs(title = "Sleep Difficulty dist", x = "Sleep Difficulty", y = "Count") +
+  theme_minimal()
+```
+
+```{r}
+ggplot(socio, aes(x = smoke)) +
+  geom_bar() +
+  labs(title = "Smoke Situation dist", x = "Smoke Situation", y = "Count") +
+  theme_minimal()
+```
+
+```{r}
+mosaicplot(table(socio$sleep_difficulty, socio$smoke),
+           main = "Sleep Difficulty ve Smoke Situation Arasındaki ",
+           xlab = "Smoke Situation", ylab = "Sleep Difficulty", color = TRUE)
+
+```
+
+## data comparison
+
+```{r}
+
+anova_result <- aov(sleep_difficulty ~ smoke, data=socio)
+anova_result
+summary(anova_result)
+
+```
+
+```{r}
+correlation_matrix <- cor(socio[, c("smoke", "sleep_difficulty")])
+
+print(correlation_matrix)
+
+```
+
+```{r}
+barplot(table(socio$smoke), main="Sigara", xlab="Sigara ", ylab="Frekans")
+
+barplot(table(socio$sleep_difficulty), main="Uyku  kenlerin ", xlab="Uyku  ", ylab="Frekans")
+
+```
+
+
+
+```{r}
+contingency_table <- table(socio$smoke, socio$sleep_difficulty)
+chi_square_result <- chisq.test(contingency_table)
+chi_square_result
+```
+
+
+
+# Hypothesis 3: smoking effect on mental and physical health .
+
+```{r}
+pathology <- data.frame(data_list[[3]])
+
+pathology <- left_join(pathology, socio, by = "ID")
+pathology <- pathology %>% select(ID,physical_health_score, smoke, mental_health_score)
+
+```
+
+## Data check n' cleaning
+
+
+```{r}
+non_smoke <- pathology %>% filter(smoke == 0)
+past_smokee <- pathology %>% filter(smoke == 1)
+now_smoke <- pathology %>% filter(smoke == 2)
+
+pathology <- na.omit(pathology)
+```
+
+
+## data discription
+
+```{r}
+check_fun(pathology$ID)
+```
+
+```{r}
+custom_summary(pathology$physical_health_score)
+custom_summary(pathology$mental_health_score)
+```
+
+
+```{r}
+qqnorm(pathology$mental_health_score)
+qqline(pathology$mental_health_score)
+
+qqnorm(pathology$physical_health_score)
+qqline(pathology$physical_health_score)
+```
+
+```{r, warning=FALSE}
+shapiro.test(pathology$physical_health_score)
+shapiro.test(pathology$mental_health_score)
+
+ks.test(pathology$physical_health_score, "pnorm", mean = mean(pathology$physical_health_score, na.rm = T), sd = sd(pathology$physical_health_score, na.rm = T))
+
+ks.test(pathology$mental_health_score, "pnorm", mean = mean(pathology$mental_health_score, na.rm = T), sd = sd(pathology$mental_health_score, na.rm = T))
+
+```
+
+```{r}
+hist(pathology$physical_health_score)
+hist(pathology$mental_health_score)
+```
+
+```{r}
+pathology %>% na.omit() %>% 
+  ggplot(aes(x = factor(mental_health_score))) + 
+  geom_bar() + 
+  labs(title = "Mental Health Score Histogram", x = "Mental Health Score", y = "Count") +
+  theme_minimal()
+
+pathology %>% na.omit() %>% 
+  ggplot(aes(x = factor(physical_health_score))) + 
+  geom_bar() + 
+  labs(title = "Mental Health Score Histogram", x = "Mental Health Score", y = "Count") +
+  theme_minimal()
+```
+
+```{r}
+boxplot(pathology$physical_health_score)
+boxplot(pathology$mental_health_score)
+```
+
+## data compariosn
+
+```{r}
+anova_result1 <- aov(pathology$mental_health_score ~ factor(smoke, levels = c(0, 1, 2)), data=pathology)
+anova_result
+summary(anova_result)
+```
+
+
+```{r}
+anova_result2 <- aov(pathology$physical_health_score ~ factor(smoke, levels = c(0, 1, 2)), data=pathology)
+anova_result
+summary(anova_result)
+```
+
+```{r}
+group0 <- pathology %>% filter(smoke == 0)
+group1 <- pathology %>% filter(smoke == 1)
+group2 <- pathology %>% filter(smoke == 2)
+
+t.test(group0$physical_health_score, group1$physical_health_score)
+t.test(group1$physical_health_score, group2$physical_health_score)
+t.test(group0$physical_health_score, group2$physical_health_score)
+
+t.test(group0$mental_health_score, group1$mental_health_score)
+t.test(group1$mental_health_score, group2$mental_health_score)
+t.test(group0$mental_health_score, group2$mental_health_score)
+
+```
+
+```{r}
+pathology %>% select(physical_health_score,smoke,mental_health_score) %>% cor()
+  
+  
+corrplot::corrplot( pathology %>% select(physical_health_score,smoke,mental_health_score) %>% cor(),
+                    method = "circle")
+```
+
+
+```{r}
+chi_square_result2 <- chisq.test(pathology$smoke, pathology$mental_health_score)
+chi_square_result1 <- chisq.test(pathology$smoke, pathology$physical_health_score)
+
+print(chi_square_result1)
+print(chi_square_result2)
+
+```
+
+```{r}
+ggplot() +
+  geom_boxplot(data = group0, aes(x = "Group 0", y = physical_health_score), fill = "lightblue") +
+  geom_boxplot(data = group1, aes(x = "Group 1", y = physical_health_score), fill = "lightgreen") +
+  geom_boxplot(data = group2, aes(x = "Group 2", y = physical_health_score), fill = "lightpink") +
+  labs(x = "Smoke Group", y = "Physical Health Score", title = "Physical Health Score by Smoke Group")
+```
+
+
+```{r}
+ggplot() +
+  geom_boxplot(data = group0, aes(x = "Group 0", y = mental_health_score), fill = "lightblue") +
+  geom_boxplot(data = group1, aes(x = "Group 1", y = mental_health_score), fill = "lightgreen") +
+  geom_boxplot(data = group2, aes(x = "Group 2", y = mental_health_score), fill = "lightpink") +
+  labs(x = "Smoke Group", y = "Mental Health Score", title = "Mental Health Score by Smoke Group")
+```
+
+```{r}
+model <- lm(mental_health_score ~ physical_health_score, data = pathology)
+
+summary(model)
+```
+
+```{r}
+# Scatterplot ve regresyon doğrusunu oluştur
+ggplot(pathology, aes(x = physical_health_score, y = mental_health_score)) +
+  geom_point() +  # Scatterplot
+  geom_smooth(method = "lm", se = FALSE) +  # Regresyon doğrusu
+  labs(title = "Regression Analysis: Mental Health vs. Physical Health",
+       x = "Physical Health Score",
+       y = "Mental Health Score") +
+  theme_minimal()
+
+```
+
+
+
+# Hypothesis 4: sleep duraiton effect on body mass index
+
+## Data check and cleaning
+
+```{r}
+bmi <- data_list[[4]]
+bmi <- left_join(bmi, sleepdata)
+bmi <- bmi %>% select(ID,bmi,sleep_duration)
+```
+
+```{r}
+bmi_high <- bmi %>% filter(sleep_duration >= mean(sleep_duration, na.rm = T))
+bmi_low <- bmi %>% filter(sleep_duration < mean(sleep_duration, na.rm = T))
+```
+
+
+## Data Discription
+
+```{r}
+check_fun(bmi$ID)
+```
+
+```{r}
+custom_summary(bmi$bmi)
+```
+
+```{r}
+qqnorm(bmi$bmi)
+qqline(bmi$bmi)
+
+```
+
+```{r}
+shapiro.test(bmi$bmi)
+
+ks.test(bmi$bmi, "pnorm", mean = mean(bmi$bmi, na.rm = T), sd= sd(bmi$bmi,na.rm = T))
+```
+
+```{r}
+hist(bmi$bmi)
+```
+
+```{r}
+barplot(table(bmi$bmi),
+        main = "BMI Frequency",
+        xlab = "BMI",
+        ylab = "Frequency",
+        col = "lightblue",
+        border = "blue")
+
+```
+
+```{r}
+boxplot(bmi$bmi)
+```
+
+## Data comparison
+
+```{r}
+t.test(bmi_high$sleep_duration, bmi_low$sleep_duration)
+
+```
+```{r}
+bmi %>% na.omit() %>% select(bmi,sleep_duration) %>% cor()
+```
+
+```{r}
+bmi_for_cor <- bmi %>%
+  select(-ID) %>%
+  mutate(bmi_high = ifelse(bmi > mean(bmi, na.rm = TRUE), 1, 0)) %>%
+  mutate(bmi_low = ifelse(bmi <= mean(bmi, na.rm = TRUE), 1, 0))
+remove(bmi_high, bmi_low)
+correlation_matrix <- cor(bmi_for_cor, use = "complete.obs")
+ggcorrplot(correlation_matrix, lab = TRUE)
+```
+
+```{r}
+
+bmi_for_cor <- bmi_for_cor %>%
+  mutate(category = ifelse(bmi_high == 1, "High", "Low"))
+
+ggplot(data = bmi_for_cor, aes(x = category, y = bmi, fill = category)) +
+  geom_boxplot() +
+  labs(x = "Category", y = "BMI", title = "Boxplot of BMI for High and Low Categories") +
+  scale_fill_manual(values = c("red", "blue"))  # Renkleri belirleme
+remove(bmi_for_cor, correlation_matrix)
+```
+
+```{r}
+bmi %>% 
+  ggplot(aes(bmi)) +
+  geom_density() +
+  labs(x = "BMI", y = "Sleep Duration", title = "Density Plot of BMI and Sleep Duration")
+
+bmi %>% 
+  ggplot(aes(sleep_duration)) +
+  geom_density() +
+  labs(x = "BMI", y = "Sleep Duration", title = "Density Plot of BMI and Sleep Duration")
+```
+
+# Hypothesis 5: sleep duraiton effect on cortisol level
+
+## data check cleaning
+
+```{r}
+cortisol <-data.frame(data_list[[5]])
+cortisol <- left_join(cortisol, sleepdata)
+cortisol <- cortisol %>% select(ID,cortisol_9am,cortisol_10am,cortisol_11am,cortisol_14pm,cortisol_18pm,cortisol_22pm,sleep_duration)
+```
+
+```{r}
+cortisol <- na.omit(cortisol)
+
+cortisol_long <- cortisol %>%
+  pivot_longer(cols = starts_with("cortisol_"), 
+               names_to = "time", 
+               values_to = "cortisol_level") %>%
+  mutate(time = case_when(
+    time == "cortisol_9am" ~ "09",
+    time == "cortisol_10am" ~ "10",
+    time == "cortisol_11am" ~ "11",
+    time == "cortisol_14pm" ~ "14",
+    time == "cortisol_18pm" ~ "18",
+    time == "cortisol_22pm" ~ "22"
+  ))
+cortisol_long$sleep_situation <- ifelse(cortisol_long$sleep_duration >= mean(cortisol_long$sleep_duration, na.rm = TRUE), "more", "less")
+
+cortisol$sleep_situation <- ifelse(cortisol$sleep_duration >= mean(cortisol$sleep_duration, na.rm = TRUE), "more", "low")
+
+cortisol_more <- cortisol %>% filter(sleep_situation == "more")
+cortisol_low <- cortisol %>% filter(sleep_situation == "low")
+
+```
+
+## data discription
+
+```{r}
+check_fun(cortisol$ID)
+```
+
+```{r}
+custom_summary(cortisol$cortisol_9am)
+custom_summary(cortisol$cortisol_10am)
+custom_summary(cortisol$cortisol_11am)
+custom_summary(cortisol$cortisol_14pm)
+custom_summary(cortisol$cortisol_18pm)
+custom_summary(cortisol$cortisol_22pm)
+```
+
+```{r}
+hist(cortisol_long$cortisol_level, main = "Kortizol Seviyesi Dağılımı")
+boxplot(cortisol_long$cortisol_level, main = "Kortizol Seviyesi Kutu Grafiği")
+
+```
+
+```{r}
+shapiro.test(cortisol$cortisol_9am)$p.value
+shapiro.test(cortisol$cortisol_10am)$p.value
+shapiro.test(cortisol$cortisol_11am)$p.value
+shapiro.test(cortisol$cortisol_14pm)$p.value
+shapiro.test(cortisol$cortisol_18pm)$p.value
+shapiro.test(cortisol$cortisol_22pm)$p.value
+```
+
+
+## data comparison
+
+
+```{r}
+
+ggplot(cortisol_long, aes(x = time, y = cortisol_level, fill = sleep_situation)) +
+  geom_boxplot() +
+  labs(x = "Saat", y = "Kortizol Seviyesi", fill = "Uyku Durumu") +
+  scale_fill_manual(values = c("more" = "blue", "less" = "red")) +  
+  facet_wrap(~time, scales = "free") +
+  theme_minimal()
+
+```
+
+
+```{r}
+model <- aov(cortisol_level ~ time + sleep_situation, data =cortisol_long )
+model
+```
+
+```{r}
+ggplot(data = cortisol_long, aes(x = time, y = cortisol_level, color = sleep_situation)) +
+  geom_point() +
+  labs(x = "Zaman", y = "Kortizol Seviyesi", color = "Uyku Durumu") +
+  ggtitle("Zamana Gore Kortizol Seviyeleri ve Uyku Durumu")
+```
+
+
+```{r}
+ggplot(data = cortisol_long, aes(x = time, y = cortisol_level, color = sleep_situation)) +
+  geom_point() +
+  labs(x = "Zaman", y = "Kortizol Seviyesi", color = "Uyku Durumu") +
+  geom_smooth(method = "lm", formula = y ~ x, se = FALSE, aes(group = sleep_situation)) +
+  ggtitle("Zamana Gore Kortizol Seviyeleri ve Uyku Durumu")
+```
+
+
+
+
+
+# Hypothesis 6: sleep duration effect on cognitive
+
+## data check and clean
+
+```{r}
+cognitive <- data.frame(data_list[[6]])
+```
+
+```{r}
+cognitive <- left_join(cognitive, sleepdata, by = "ID")
+
+cognitive <- cognitive %>% select(ID, cognitive_error_1,cognitive_error_2, sleep_duration)
+
+# cognitive1 <- cognitive %>%
+#   mutate(sleep_situation = ifelse(sleep_duration >= mean(sleep_duration, na.rm = TRUE), 1, 2))
+
+cognitive <- cognitive %>%
+  mutate(sleep_situation = ifelse(sleep_duration >= mean(sleep_duration, na.rm = TRUE), 1, 0))
+
+cognitive <- cognitive %>%
+  mutate(mean_error = rowMeans(select(., cognitive_error_1, cognitive_error_2), na.rm = TRUE))
+
+cognitive <- cognitive %>% select(ID, mean_error,,sleep_situation,sleep_duration)
+
+```
+
+```{r}
+cognitive_low <- cognitive %>% filter(sleep_situation == 0)
+cognitive_high <- cognitive %>% filter(sleep_situation == 1)
+```
+
+## data discription
+
+```{r}
+check_fun(cognitive$ID)
+```
+
+
+```{r}
+custom_summary(cognitive$mean_error)
+
+paste("num of high sleep level", sum(cognitive_high$sleep_duration, na.rm = T))
+paste("num of low sleep level", sum(cognitive_low$sleep_duration, na.rm = T))
+```
+
+```{r}
+qqnorm(cognitive$mean_error)
+qqline(cognitive$mean_error)
+```
+
+```{r}
+hist(cognitive$mean_error)
+
+```
+
+```{r}
+shapiro.test(cognitive$mean_error)
+```
+
+## data comparison
+
+```{r}
+t.test(cognitive_high$mean_error, cognitive_low$mean_error)
+
+```
+
+```{r}
+correlation_matrix <- cor(cognitive %>% select(cognitive_error_1, cognitive_error_2, sleep_duration),
+                          use = "complete.obs")
+correlation_matrix
+```
+
+```{r}
+ggcorrplot(correlation_matrix, 
+           lab = TRUE, 
+           title = "Korelasyon Matrisi")
+```
+
+
+```{r}
+model <- lm(mean_error ~ sleep_duration, data = cognitive)
+summary(model)
+```
+
+```{r}
+ggplot(cognitive, aes(x = sleep_duration, y = mean_error)) +
+  geom_point() +
+  geom_smooth(method = "lm", se = TRUE, color = "blue") +
+  labs(x = "Uyku Suresi", y = "Bilissel Hata 1", title = "Uyku Suresi ve Bilissel Hata 1 Arasındaki Lineer Regresyon") +
+  theme_minimal()
+```
+```{r}
+cognitive %>% na.omit() %>% ggplot(aes(x = as.factor(sleep_duration), y = mean_error, fill = sleep_situation)) +
+  geom_boxplot() +
+  labs(title = "Sleep Duration vs Mean Error by Sleep Situation",
+       x = "Sleep Duration",
+       y = "Mean Error",
+       fill = "Sleep Situation") +
+  theme_minimal()
+```
+
+
+
+# Hypothesis 7: sleep duration vs pathology 
+
+## data clean and check
+
+```{r}
+pathology <- data.frame(data_list[[7]])
+pathology$Alzheimer_score[pathology$Alzheimer_score == ""] <- NA
+pathology <- na.omit(pathology)
+
+```
+
+```{r}
+unique(pathology$Alzheimer_score)
+```
+
+
+```{r}
+pathology$Alzheimer_score_num <- NA
+
+```
+
+```{r}
+for (i in 1:length(pathology$Alzheimer_score)) {
+  
+  parts <- strsplit(pathology$Alzheimer_score[i], "-")[[1]]
+  len <- length(parts)
+  
+  if (len == 1) {
+    pathology$Alzheimer_score_num[i] <- roman_to_int(parts[1])
+  } else {
+    value1 <- roman_to_int(parts[1])
+    value2 <- roman_to_int(parts[2])
+    pathology$Alzheimer_score_num[i] <- (value1 + value2) / 2
+  }
+}
+
+remove(i,len,parts, value1, value2)
+```
+
+```{r}
+pathology <- left_join(pathology, sleepdata)
+pathology <- pathology %>% select(ID,Alzheimer_score_num,sleep_duration)
+```
+
+
+```{r}
+
+pathology <- pathology %>%
+  mutate(sleep_situation = ifelse(sleep_duration >= mean(sleep_duration, na.rm = TRUE), 1, 0))
+
+pathology_low <- pathology %>% filter(sleep_situation == 0)
+pathology_high <- pathology %>% filter(sleep_situation == 1)
+pathology <- na.omit(pathology)
+```
+
+## data discription
+
+```{r}
+str(pathology)
+```
+
+```{r}
+custom_summary(pathology$Alzheimer_score_num)
+custom_summary(pathology$sleep_duration)
+```
+
+```{r}
+check_fun(pathology$ID)
+```
+```{r}
+hist(pathology$Alzheimer_score_num)
+
+```
+
+```{r}
+shapiro.test(pathology$Alzheimer_score_num)
+```
+
+## data comparison
+
+```{r}
+korelasyon_matrix <- cor(pathology$Alzheimer_score_num, pathology$sleep_duration, use = "complete.obs")
+print(korelasyon_matrix)
+
+```
+
+
+```{r}
+t_test_res <- t.test(pathology_high$Alzheimer_score_num, pathology_low$Alzheimer_score_num)
+t_test_res
+```
+
+
+```{r}
+ggplot() +
+  geom_boxplot(data = pathology_low, aes(x = sleep_situation, y = Alzheimer_score_num, fill = sleep_situation), width = 0.5) +
+  geom_boxplot(data = pathology_high, aes(x = sleep_situation, y = Alzheimer_score_num, fill = sleep_situation), width = 0.5) +
+  labs(x = "Sleep Situation", y = "Alzheimer_score_num", title = "Comparison of Sleep Duration by Sleep Situation") +
+  scale_fill_manual(values = c("less" = "blue", "more" = "red")) +
+  theme_minimal()
+```
+

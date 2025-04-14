@@ -1,0 +1,51 @@
+/* Arka plan renk geçişi */
+body {
+  background: linear-gradient(135deg, #f409e9, #f20909);
+  color: #333; /* Varsayılan metin rengi */
+  font-family: Arial, sans-serif;
+  margin: 0;
+  padding: 0;
+}
+
+/* Başlık stilleri */
+h1, h2, h3, h4, h5, h6 {
+  color: #222;
+  text-shadow: 1px 1px 2px rgba(0, 0, 0, 0.1);
+}
+
+/* Kod blokları */
+pre, code {
+  background-color: #f4f4f4;
+  border: 1px solid #ddd;
+  border-radius: 5px;
+  padding: 5px;
+  color: #333;
+}
+
+/* Tablolar */
+table {
+  border-collapse: collapse;
+  width: 100%;
+  background-color: rgba(255, 255, 255, 0.8);
+}
+
+table th, table td {
+  border: 1px solid #ddd;
+  padding: 8px;
+  text-align: left;
+}
+
+table th {
+  background-color: #ff9a9e;
+  color: white;
+}
+
+/* Linkler */
+a {
+  color: #007BFF;
+  text-decoration: none;
+}
+
+a:hover {
+  text-decoration: underline;
+}

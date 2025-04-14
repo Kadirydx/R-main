@@ -1,0 +1,559 @@
+---
+title:  Overweight reasons
+author: Kadir Yurdakul
+date: "`r Sys.Date()`"   
+output:
+  html_document:
+    toc: true
+    toc_float: true
+    toc_depth: 2
+    number_sections: false
+    code_folding: show
+    css: style.css
+---
+
+```{r message=FALSE, warning=FALSE}
+library(tidyverse)
+library(hrbrthemes)
+library(viridis)
+library(dplyr)
+library(ggcorrplot)
+library(corrplot)
+library(ggplot2)
+library(tidyr)
+library(ggExtra)
+library(reshape2)
+library(gridExtra)
+library(FSA)
+
+```
+
+```{r}
+# data import in environment
+
+#my_data <- read.csv(file = "C:/BTEC581/R project/dataset/ObesityDataSet_raw_and_data_sinthetic.csv")
+my_data <- read.csv(file = "archive/ObesityDataSet_raw_and_data_sinthetic.csv")
+
+```
+
+# Data Discription
+
+```{r}
+head(my_data)
+```
+
+```{r}
+str(my_data)
+glimpse(my_data)
+dim(my_data)
+colnames(my_data)
+```
+
+# DATA MANIPULATION
+
+## Changing colum names and adding ID numbers for every data
+
+```{r}
+my_data$ID <- c(1:2111)
+my_data <- my_data %>% select(ID,everything())
+```
+
+```{r}
+colnames(my_data) <- c("ıd", "sex","age","height","weight","family_hist","high_cal_cons","vegetable_cons","main_meals","snacks","smoke","water_cons","cal_control","physically_act","screen_time","alcohol_cons","transporter", "obesity_type")
+```
+
+## adding bmi var
+```{r}
+my_data$bmi <- my_data$weight / (my_data$height^2)
+
+```
+
+Gender (sex), Age (sex), Height (height), Weight (weight), family history with overweight, frequent consumption of high caloric food (high_cal_cons), frequency of consumption of vegetables (vegetable_cons), number of main meals (main_meals), consumption of food between meals (snacks), smoking yes or no (smoke), consumption of water daily (water_cons), consumption of alcohol (alcohol_cons), calories consumption monitoring (cal_control), physical activity frequency (physically_act), time using technology devices (screen_time), transportation used (transporter), NObeyesdad (obesity_type)
+
+## NA control
+
+```{r}
+sum(is.na(my_data))
+```
+
+## Characterizations
+
+```{r}
+summary(my_data)
+
+```
+
+# Hypothesis-1: Genetic background is important for being overweight
+
+## Aim 1: FEMALE MORE TEND TO BEING OBESITY
+
+```{r}
+my_data %>% select(sex,obesity_type) %>% head()
+```
+
+```{r}
+table(
+  my_data$sex,my_data$obesity_type
+)
+```
+
+### Chi-Square Test for Independence
+
+```{r}
+chisq.test(table(my_data$sex, my_data$obesity_type))
+```
+
+Since p-value < 0.05, H0 hypothesis is rejected. That is, there is a statistically significant relationship between gender and obesity type.
+
+```{r}
+ggplot(my_data, aes(x = obesity_type, fill = sex)) +
+  geom_bar(position = "dodge") +
+  theme_minimal() +
+  labs(
+    title = "Obesity Types by Sex",
+    x = "Obesity Type",
+    y = "Frequency",
+    fill = "Sex"
+  ) +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+```
+
+According to Pearson's Chi-Square Test results, there is a significant relationship between sex and obesity type (obesity_type) (X-squared = 657.75, df = 6, p-value \< 2.2e-16).
+
+Because the p-value (\< 0.05) is quite small and this shows that the two variables are not independent, that is, there is a statistically significant relationship between them.
+
+### analyze for bmi and weight by sex
+
+```{r}
+my_data %>% select(sex,bmi) %>% head()
+
+```
+
+```{r}
+shapiro.test(my_data$bmi); shapiro.test(my_data$weight)
+```
+
+For BMI (Body Mass Index) data: Since the p-value is too small (p \< 0.05), the BMI data does not follow a normal distribution. For Weight data: Similarly, since the p-value is too small (p \< 0.05), the Weight data does not follow a normal distribution.
+
+```{r}
+
+hist(my_data$bmi, main = "Histogram of BMI", col = "lightblue")
+qqnorm(my_data$bmi); qqline(my_data$bmi)
+hist(my_data$weight, main = "Histogram of Weight", col = "lightgreen")
+qqnorm(my_data$weight); qqline(my_data$weight)
+
+```
+
+```{r warning=FALSE}
+my_data %>% ggplot( aes(sex, weight, fill = sex)) +
+  geom_boxplot() +
+  scale_fill_viridis(discrete = TRUE, alpha=0.6) +
+    geom_jitter(color="black", size=0.4, alpha=0.9) +
+    theme_ipsum() +
+    theme(
+      legend.position="none",
+      plot.title = element_text(size=11)
+    ) +
+    ggtitle(" Sex vs Weight boxplot with jitter") +
+    ylab("WEIGHT")
+```
+
+```{r warning=FALSE}
+
+my_data %>% 
+  ggplot(aes(sex, bmi)) +
+  geom_boxplot(fill = "lightblue") +
+  geom_jitter(color = "black", size = 0.4, alpha = 0.9) +
+  theme_ipsum() +
+  theme(
+    legend.position = "none",
+    plot.title = element_text(size = 11)
+  ) +
+  ggtitle("Sex vs BMI Boxplot with Jitter") +
+  ylab("BMI")
+
+```
+
+### wilcox tests
+
+```{r}
+wilcox.test(weight ~ sex, data = my_data)
+
+```
+
+p-value \< 2.2e-16: The p-value is very small, indicating a significant difference between the groups. Typically, a p-value of less than 0.05 is considered to indicate a difference between the two groups.
+
+```{r}
+ wilcox.test(bmi ~ sex, data = my_data)
+```
+
+The p-value of this test is 0.4113, which indicates that there is no statistically significant difference in the BMI distributions between men and women.
+
+Alternative Hypothesis: The alternative hypothesis of this test is that there is a difference between the groups, but since the p-value is large, this hypothesis is rejected and the group centers are assumed to be equal.
+
+## Aim 2 : IF THERE İS OBESITY HISTORY IN FAMILY, THE PERSON TEND TO BE GAIN WEIGHT
+
+```{r}
+table(my_data$family_hist, my_data$obesity_type)
+table(my_data$family_hist)
+
+```
+
+```{r}
+chisq.test(table(my_data$family_hist, my_data$obesity_type))
+```
+
+p-value (p-value \< 2.2e-16): The p-value is extremely small (nearly zero). This leads us to reject the null hypothesis. The null hypothesis is a claim that there is no significant difference between family_hist (family history of obesity) and obesity_type (obesity type). The p-value here indicates that this difference is highly significant and that there is a significant relationship between the groups.
+
+```{r}
+my_data %>% ggplot( aes(family_hist, weight, fill = family_hist))+
+  geom_boxplot() +
+  labs(title = "Weight Distribution by Family History of Obesity", 
+       x = "Family History of Obesity", y = "Weight") +
+  theme_minimal()
+
+
+```
+
+```{r message=FALSE, warning=FALSE}
+
+my_data %>% 
+  ggplot(aes(family_hist, bmi)) +
+  geom_boxplot(fill = "lightblue") +
+  geom_jitter(color = "black", size = 0.4, alpha = 0.9) +
+  theme_ipsum() +
+  theme(
+    legend.position = "none",
+    plot.title = element_text(size = 11)
+  ) +
+  ggtitle("Overweight person in family vs BMI ") +
+  ylab("BMI")
+```
+
+### wilcox tests
+
+```{r}
+wilcox.test(weight ~ family_hist, data = my_data)
+```
+
+The p-value of this test shows that there is a statistically significant difference between the groups with and without family history (family_hist). That is, there is a significant difference in the weight distributions between those with family history and those without family history.
+
+Alternative Hypothesis: The alternative hypothesis of this test is that there is a difference between the groups and since the p-value is very small, the alternative hypothesis is accepted.
+
+```{r}
+ wilcox.test(bmi ~ family_hist, data = my_data)
+```
+
+The p-value of this test shows that there is a statistically significant difference between the groups with and without family history (family_hist). That is, there is a significant difference in the BMI distributions between those with and without family history.
+
+Alternative Hypothesis: The alternative hypothesis of this test is that there is a difference between the groups and since the p-value is very small, the alternative hypothesis is accepted.
+
+# Hypothesis-2:TRANSPORTER USAGE EFFECT ON OBESITY
+
+## Aim 1:
+
+```{r}
+my_data %>% select(weight,bmi, obesity_type, transporter) %>% head(120)
+```
+
+```{r}
+summary(my_data %>% select(weight,bmi, obesity_type, transporter))
+
+```
+
+```{r}
+ggplot(my_data, aes(x = obesity_type, y = bmi)) + 
+  geom_boxplot() + 
+  ggtitle("BMI by Obesity Type")
+
+ggplot(my_data, aes(x = obesity_type, y = weight)) + 
+  geom_boxplot() + 
+  ggtitle("BMI by Obesity Type")
+
+ggplot(my_data, aes(x = transporter, y = bmi)) + 
+  geom_boxplot() + 
+  ggtitle("Weight by Transporter Type")
+
+ggplot(my_data, aes(x = transporter, y = weight)) + 
+  geom_boxplot() + 
+  ggtitle("Weight by Transporter Type")
+
+
+```
+
+```{r}
+table(my_data$obesity_type, my_data$transporter)
+
+
+```
+
+```{r}
+heatmap(table(my_data$obesity_type, my_data$transporter), 
+        Colv = NA, Rowv = NA, 
+        col = viridis(100), 
+        scale = "none", 
+        main = "Obesity Type by Transporter Type")
+```
+
+```{r}
+chisq.test(table(my_data$obesity_type, my_data$transporter))
+
+```
+
+Conclusion: Since the P-value is very small, it is concluded that there is a statistically significant relationship between the type of obesity and the type of transportation. In other words, there is a significant relationship between the types of obesity and the types of transportation (e.g. car, motorcycle, walking, etc.).
+
+Alternative Hypothesis: The alternative hypothesis of the Chi-square test is that there is a relationship between the groups. Since the P-value is very small, the alternative hypothesis is accepted.
+
+```{r}
+kruskal.test(weight ~ transporter, data = my_data)
+
+```
+
+Since the p-value (0.00001552) is very small, we reject the null hypothesis in this case. The null hypothesis states that there is no difference between the groups. That is, there is a significant difference in weight between the transport types.
+
+```{r}
+kruskal.test(bmi ~ transporter, data = my_data)
+
+```
+
+Since the p-value (0.00000000196) is very small, we reject the null hypothesis in this case. The null hypothesis states that there is no difference between the groups. As a result, there is a significant difference between the types of transportation and BMI.
+
+### post-hoc test
+
+```{r}
+my_data$transporter <- factor(my_data$transporter)
+
+dunnTest(weight ~ transporter, data = my_data)
+
+test_res <- dunnTest(weight ~ transporter, data = my_data)
+test_res <- test_res$res
+test_res %>% filter(P.adj < 0.05)
+```
+
+```{r}
+dunnTest(bmi ~ transporter, data = my_data)
+
+test_res <- dunnTest(bmi ~ transporter, data = my_data)
+test_res <- test_res$res
+test_res %>% filter(P.adj < 0.05)
+
+```
+
+```{r}
+
+
+ggplot(my_data %>% filter(transporter == c("Automobile","Walking","Public_Transportation")), aes(x = transporter, y = bmi, fill = transporter)) +
+  geom_boxplot() +
+  labs(title = "BMI Distribution by Transporter Type", 
+       x = "Transporter Type", 
+       y = "BMI") +
+  theme_minimal() +
+  theme(legend.position = "none")
+```
+
+```{r}
+ggplot(my_data %>% filter(transporter == c("Automobile","Walking","Public_Transportation")), aes(x = transporter, y = weight, fill = transporter)) +
+  geom_boxplot() +
+  labs(title = "weight Distribution by Transporter Type", 
+       x = "Transporter Type", 
+       y = "weight") +
+  theme_minimal() +
+  theme(legend.position = "none")
+```
+
+# Hypothesis-3:There is direct proportion between lifestyle and being overweight
+
+
+```{r}
+h2_my_data <- my_data %>% select(obesity_type, alcohol_cons, water_cons,smoke, snacks, main_meals, vegetable_cons, high_cal_cons, obesity_type, screen_time, bmi, weight) 
+```
+
+### data rearrangment for character columns
+
+```{r}
+for (i in c("alcohol_cons", "snacks")) {
+  h2_my_data <- h2_my_data %>% 
+    mutate(
+      !!i := case_when(
+        !!sym(i) == "no" ~ 0,
+        !!sym(i) == "Sometimes" ~ 1,
+        !!sym(i) == "Frequently" ~ 2,
+        !!sym(i) == "Always" ~ 3,
+        TRUE ~ NA_real_ 
+      )
+    )
+}
+```
+
+```{r}
+for (i in c("smoke", "high_cal_cons")) {
+  h2_my_data <- h2_my_data %>%
+    mutate(
+      !!i := ifelse(
+        !!sym(i) == "no", 0,
+        ifelse(!!sym(i) == "yes", 1, NA_real_)
+      )
+    )
+}
+```
+
+```{r}
+h2_my_data <- h2_my_data %>% 
+  mutate(
+    obesity_type = case_when(
+      obesity_type == "Insufficient_Weight"~ 0,
+      obesity_type == "Normal_Weight" ~ 1,
+      obesity_type == "Overweight_Level_I" ~ 2,
+      obesity_type == "Overweight_Level_II" ~ 3,
+      obesity_type == "Obesity_Type_I" ~ 4,
+      obesity_type == "Obesity_Type_II" ~ 5,
+      obesity_type == "Obesity_Type_III" ~ 6,
+    )
+  )
+```
+
+### visual
+
+```{r}
+correlation_matrix <- cor(h2_my_data , 
+                          use = "complete.obs")
+correlation_data <- melt(correlation_matrix)
+
+heatmap_plot <- ggplot(correlation_data, aes(Var1, Var2, fill = value)) +
+  geom_tile() +
+  scale_fill_gradient2(low = "blue", high = "red", mid = "white", 
+                       midpoint = 0, limit = c(-1, 1)) +
+  theme_minimal() +
+  labs(title = "Correlation Heatmap Between Lifestyle Factors and Weight")
+
+scatter_plots <- lapply(names(h2_my_data)[2:9], function(var) {
+  ggplot(h2_my_data, aes_string(x = var, y = "weight")) +
+    geom_point() +
+    geom_smooth(method = "lm", se = FALSE, color = "red") +
+    labs(title = paste("Weight vs", var), x = var, y = "Weight") +
+    theme_minimal()
+})
+```
+
+```{r}
+grid.arrange(heatmap_plot, grobs = scatter_plots, ncol = 3)
+
+heatmap_plot
+
+corrplot(cor(h2_my_data, use = "complete.obs"),            
+  method = "circle",               
+  type = "upper",                  
+  addCoef.col = "black",           
+  tl.col = "black",                
+  tl.srt = 45,                     
+  diag = T                     
+)
+```
+
+```{r message=FALSE, warning=FALSE}
+
+create_boxplot <- function(data, category_col, num_col) {
+  
+  data[[category_col]] <- round(data[[category_col]])
+  data[[category_col]] <- factor(data[[category_col]])
+  
+  plot <- ggplot(data, aes(x = .data[[category_col]], y = .data[[num_col]], fill = .data[[category_col]], colour = .data[[category_col]])) +
+    geom_boxplot() +
+    scale_fill_viridis(discrete = TRUE, alpha = 0.6, option = "A") +
+    theme_minimal() +
+    theme(
+      legend.position = "none",  
+      plot.title = element_text(size = 11)
+    ) +
+    ggtitle(paste("Boxplot for", category_col)) +  
+    xlab(category_col) +  
+    ylab(num_col)  
+  
+  return(plot)
+}
+
+
+create_boxplot(h2_my_data, "obesity_type", "bmi")
+create_boxplot(h2_my_data, "alcohol_cons", "bmi")
+create_boxplot(h2_my_data, "smoke", "bmi")
+create_boxplot(h2_my_data, "snacks", "bmi")
+create_boxplot(h2_my_data, "high_cal_cons", "bmi")
+
+create_boxplot(h2_my_data, "water_cons", "bmi")
+create_boxplot(h2_my_data, "main_meals", "bmi")
+create_boxplot(h2_my_data, "screen_time", "bmi")
+
+
+```
+
+```{r}
+perform_stat_test <- function(data, category_col, num_col) {
+  num_levels <- length(unique(data[[category_col]]))
+  
+  # Eğer kategori değişkeninin 2 seviyesi varsa Wilcoxon testi yapılır
+  if (num_levels == 2) {
+    test_result <- wilcox.test(data[[num_col]] ~ data[[category_col]], data = data)
+    test_type <- "Wilcoxon Test"
+  } 
+  # Eğer kategori değişkeninin 3 veya daha fazla seviyesi varsa Kruskal-Wallis testi yapılır
+  else if (num_levels > 2) {
+    test_result <- kruskal.test(data[[num_col]] ~ data[[category_col]], data = data)
+    test_type <- "Kruskal-Wallis Test"
+  } 
+  # Diğer durumlar için hata mesajı döndür
+  else {
+    return("Error: Kategorik değişkenin en az 2 seviyesi olmalıdır.")
+  }
+  
+  # Test sonucunu döndür
+  return(list(test_type = test_type, p_value = test_result$p.value, test_result = test_result))
+}
+
+```
+
+
+```{r}
+perform_stat_test(h2_my_data, "obesity_type", "bmi")
+
+
+```
+
+The p-value here is 2.2e-16, which is a very small value, which provides strong evidence to reject hypothesis H0. That is, there is a significant difference between different levels of the categorical variable in your dataset. In this case, we can say that there are significant differences in terms of medians between the groups.
+
+```{r}
+perform_stat_test(h2_my_data, "alcohol_cons", "bmi")
+
+```
+
+
+```{r}
+perform_stat_test(h2_my_data, "smoke", "bmi")
+
+```
+
+
+```{r}
+perform_stat_test(h2_my_data, "snacks", "bmi")
+
+```
+
+```{r}
+perform_stat_test(h2_my_data, "high_cal_cons", "bmi")
+
+```
+
+
+```{r}
+perform_stat_test(h2_my_data, "water_cons", "bmi")
+
+```
+
+```{r}
+perform_stat_test(h2_my_data, "main_meals", "bmi")
+
+```
+
+```{r}
+perform_stat_test(h2_my_data, "screen_time", "bmi")
+```
+

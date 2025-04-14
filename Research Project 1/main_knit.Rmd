@@ -1,0 +1,618 @@
+---
+title:  Research Project
+author: Kadir Yurdakul - 280104069
+date: "`r Sys.Date()`"   
+output:
+  html_document:
+    toc: true
+    toc_float: true
+    toc_depth: 2
+    number_sections: false
+    code_folding: show
+    theme: readable
+---
+
+```{r message=FALSE, warning=FALSE}
+library(tidyr)
+library(dplyr)
+library(ggcorrplot)
+library(corrplot)
+library(hrbrthemes)
+library(viridis)
+
+```
+
+# Data import and preperation for global data
+
+```{r}
+Socio_data <- read.csv(file = "C:/Users/Kadir/Desktop/Research Project1/raw/raw/PersonalDetailsQuestionnaire_04-2021.csv")
+depression_data <- read.csv(file = "C:/Users/Kadir/Desktop/Research Project1/raw/raw/DepressionData_04-2021.csv")
+stq_Data <- read.csv(file = "C:/Users/Kadir/Desktop/Research Project1/raw/raw/SleepTimingQuestionnaire_04-2021.csv")
+health_data <- read.csv(file = "C:/Users/Kadir/Desktop/Research Project1/raw/raw/CornellMedicalIndex_04-2021.csv")
+slp_data <- read.csv(file = "C:/Users/Kadir/Desktop/Research Project1/raw/raw/PersonalDetailsQuestionnaire_SleepEat_04-2021.csv")
+
+```
+
+## Column select for each datasets
+
+```{r}
+Socio_data <- Socio_data %>% 
+  select(ID, sex, soclass, isced97total, p1mstat, p1curocc, p1cuhlth, p1illnes, p1smoke, p1didsmk, p1yrsmk, p1dayhos, p1drink, p1evdrnk, p1yrdrnk, p1dlacta, p1dlactb, p1dlactc, p1dlactd, p1dlacte, p1dlactf,p1dlactg,p1dlacth,p1dlacti, p1frnds1)
+```
+
+```{r}
+depression_data <- depression_data %>% 
+  select(ID, m1date, m1age,m1score,mood1,mood1sev)
+```
+
+```{r}
+stq_Data <- stq_Data %>% 
+  select(ID, stq_age, ,weight_stq,bmi_stq,socialjetlag,msfsc_stq,msf_stq)
+```
+
+```{r}
+health_data <- health_data %>% 
+  select(ID, cmiage1,cmi1_tot1,cmi1_tot2)
+```
+
+```{r}
+slp_data <- slp_data %>% 
+  select(ID,p1age,p1getup,p1slpnt,p1hrslp)
+```
+
+## Combine all data as full_data
+
+```{r}
+full_data <- full_join(Socio_data, depression_data ,by = "ID")
+full_data <- full_join(full_data,slp_data ,by = "ID")
+full_data <- full_join(full_data,health_data ,by = "ID")
+full_data <- full_join(full_data, stq_Data ,by = "ID")
+
+full_data <- full_data %>% 
+  select(ID, sex, m1age, p1age,stq_age,cmiage1, everything())
+
+full_data %>% na.omit() %>% head()
+
+```
+
+# Data Type and Cleaning
+
+```{r}
+str(full_data)
+```
+
+## Rearrange for age column
+
+```{r}
+full_data <- full_data %>% 
+  mutate(age_avg = round((m1age + p1age) / 2, 0)) %>% 
+  select(ID, sex, age_avg, everything()) %>% 
+  select(-m1age, -p1age)
+
+head(full_data$age_avg)
+```
+
+## Rearrange for sex column
+
+```{r}
+unique(full_data$sex)
+
+
+full_data <- full_data %>%
+  mutate(sex = na_if(sex, ""))
+
+full_data$sex <- factor(full_data$sex, levels = c("Female", "Male"))
+
+unique(full_data$sex)
+
+```
+
+## Rearrange for isced97total column
+
+```{r}
+unique(full_data$isced97total)
+
+level_for_isced <- c("tertiary education first stage level 5", 
+          "post secondary non-tertiary education level 4",
+          "upper secondary education level 3",
+          "lower secondary education level 2", 
+          "tertiary education second stage")
+
+full_data$isced97total <- factor(full_data$isced97total, levels = level_for_isced)
+head(
+  full_data$isced97total
+)
+```
+
+## Rearrange for socialclass column
+
+```{r}
+unique(full_data$soclass)
+
+full_data$soclass[full_data$soclass == ""] <- NA 
+
+
+occupation_levels <- c(
+  "I - Professional occupations",
+  "II - Intermediate occupations",
+  "III(M) - Skilled Manual occupations",
+  "III(N) - Skilled Non-manual occupations",
+  "IV - Partly Skilled occupations",
+  "V - Unskilled occupations"
+)
+
+
+full_data$soclass <- factor(full_data$soclass, levels = occupation_levels, ordered = TRUE)
+
+
+full_data <- full_data %>% 
+  select(ID,sex,age_avg,soclass,,everything())
+
+unique(full_data$soclass)
+
+```
+
+## Rearrange for marriage status column
+
+```{r}
+unique(full_data$p1mstat)
+
+
+full_data$p1mstat[full_data$p1mstat == ""] <- NA
+full_data$p1mstat[full_data$p1mstat == "widowed"] <- "divorced"
+full_data$p1mstat[full_data$p1mstat == "separated"] <- "divorced"
+
+
+full_data <- full_data %>% 
+  mutate(
+    p1mstat = factor(
+      p1mstat, 
+      levels = c("Married", "divorced", "single")
+    ))
+
+unique(full_data$p1mstat)
+
+```
+
+## Rearrange for current occupation column
+
+```{r}
+unique(full_data$p1curocc)
+
+full_data$p1curocc[full_data$p1curocc == ""] <- NA
+
+full_data <- full_data <- full_data %>% 
+  mutate(
+    p1curocc = case_when(
+      p1curocc == "retired" | p1curocc == "housewife" | p1curocc == "unemployed" ~ "not-working",
+      p1curocc == "part-time employment" | p1curocc == "retired with part-tme employment" | p1curocc == "housewife with a part-time job" ~ "part-time-working",
+      p1curocc == "retired with a full time job" | p1curocc == "full-time employment" ~ "full-time-working",
+      TRUE ~ p1curocc  # This ensures other values are retained
+    )
+  ) 
+
+
+
+employment_levels <- c(
+  "full-time-working",
+  "part-time-working",
+  "not-working"
+)
+
+full_data$p1curocc <- factor(full_data$p1curocc, levels = employment_levels, ordered = TRUE)
+
+
+unique(full_data$p1curocc)
+
+```
+
+## Rearrange for current health column
+
+```{r}
+unique(full_data$p1cuhlth)
+full_data$p1cuhlth <- gsub("Very bad", 0, full_data$p1cuhlth)
+full_data$p1cuhlth <- gsub("Bad", 1, full_data$p1cuhlth)
+full_data$p1cuhlth <- gsub("Fair", 2, full_data$p1cuhlth)
+full_data$p1cuhlth <- gsub("Good", 3, full_data$p1cuhlth)
+full_data$p1cuhlth <- gsub("Very good", 4, full_data$p1cuhlth)
+
+full_data$p1cuhlth[full_data$p1cuhlth == ""] <- NA
+full_data$p1cuhlth <- as.numeric(full_data$p1cuhlth)
+
+unique(full_data$p1cuhlth)
+
+```
+
+## Rearrange for illnes column
+
+```{r}
+unique(full_data$p1illnes)
+
+full_data$p1illnes <- gsub("yes", 1, full_data$p1illnes)
+full_data$p1illnes <- gsub("no", 0, full_data$p1illnes)
+
+full_data$p1illnes[full_data$p1illnes == ""] <- NA
+full_data$p1illnes <- as.numeric(full_data$p1illnes)
+
+unique(full_data$p1illnes)
+
+```
+
+## Rearrange and combine for smoke columns
+
+```{r}
+unique(full_data$p1smoke)
+unique(full_data$p1didsmk)
+
+full_data$p1smoke[full_data$p1smoke == ""] <- NA
+full_data$p1didsmk[full_data$p1didsmk == ""] <- NA
+
+unique(full_data$p1smoke)
+unique(full_data$p1didsmk)
+
+
+```
+
+```{r}
+full_data <- full_data %>%
+  mutate(
+    smoke = case_when(
+      p1smoke == "No" & is.na(p1didsmk) & p1yrsmk == 0.00 ~ 0,  # never
+      p1smoke == "No" & is.na(p1didsmk) & p1yrsmk > 0.00 ~ 1,   # smoke before
+      p1smoke == "No" & is.na(p1didsmk) & p1yrsmk == is.na(p1yrsmk) ~ 0,  # never
+      
+      p1smoke == "No" & p1didsmk == "No" ~ 0,                  # never
+      p1smoke == "No" & p1didsmk == "Yes" ~ 1,                 # smoek before
+      p1smoke == "Yes" ~ 2                                     # still smoke
+    )
+  )
+
+full_data %>% 
+  select(p1smoke, p1didsmk, smoke, p1yrsmk, age_avg) %>% 
+  filter(is.na(p1smoke)) %>% 
+  head()
+
+full_data %>% 
+  select(p1smoke, p1didsmk, smoke, p1yrsmk, age_avg) %>% 
+  head()
+
+```
+
+## Rearrange and combine for drink column
+
+```{r}
+full_data %>% select(p1drink,p1evdrnk,p1yrdrnk, age_avg) %>% 
+  head()
+
+unique(full_data$p1drink);unique(full_data$p1evdrnk)
+
+
+
+full_data$p1drink[full_data$p1drink == ""] <- NA
+full_data$p1evdrnk[full_data$p1evdrnk == ""] <- NA
+
+full_data$p1evdrnk[full_data$p1evdrnk == "no"] <- "No"
+full_data$p1evdrnk[full_data$p1evdrnk == "yes"] <- "Yes"
+
+
+full_data <- full_data %>%
+  mutate(
+    drink = case_when(
+      p1drink == "No" & is.na(p1evdrnk) & is.na(p1yrdrnk) ~ 0,  # Never
+      p1drink == "No" & is.na(p1evdrnk) & p1yrdrnk == 0.00 ~ 0, # Never
+      p1drink == "No" & is.na(p1evdrnk) & p1yrdrnk > 0.00 ~ 1,  # Drink before
+      p1drink == "No" & p1evdrnk == "No" ~ 0,                  # Never
+      p1drink == "No" & p1evdrnk == "Yes" ~ 1,                 # Drink before
+      p1drink == "Yes" ~ 2                                     # Still drink
+    )
+  )
+
+full_data %>% select(p1drink,p1evdrnk,p1yrdrnk, age_avg, drink) %>% head()
+
+```
+
+## Rearrange and make dlact score for dlact columns
+
+```{r}
+unique(full_data$p1dlacta)
+
+full_data <- full_data %>%
+  mutate(across(
+    starts_with("p1dlact"), 
+    ~ case_when(
+      . == "" ~ NA,  
+      . == "no difficulty" ~ 0,
+      . == "some difficulty" ~ 1,
+      . == "great difficulty" ~ 2,
+    )
+  )) %>%
+  mutate(
+    dlact_score = p1dlacta + p1dlactb + p1dlactc + p1dlactd + p1dlacte + p1dlactf + p1dlactg + p1dlacth + p1dlacti
+  )
+
+
+full_data %>% select(p1dlacta,p1dlactb,p1dlactc,p1dlactd,p1dlacte,p1dlactf,p1dlactg,p1dlacth,p1dlacti, dlact_score) %>% head()
+unique(full_data$p1dlacta)
+
+```
+
+## Rearrange for frineds column
+
+```{r}
+unique(full_data$p1frnds1)
+
+full_data$p1frnds1[full_data$p1frnds1 == ""] <- NA
+
+full_data <- full_data %>% 
+  mutate(
+    p1frnds1 = case_when(
+      p1frnds1 == "Less than average" ~ 0,
+      p1frnds1 == "Average" ~ 1,
+      p1frnds1 == "More than average" ~ 2
+      
+    )
+  )
+unique(full_data$p1frnds1)
+
+```
+
+## Rearrange for mood columns
+
+```{r}
+unique(full_data$mood1)
+unique(full_data$mood1sev)
+
+full_data$mood1[full_data$mood1 == ""] <- NA
+full_data$mood1sev[full_data$mood1sev == ""] <- NA
+
+full_data <- full_data %>% 
+  mutate(
+    mood1 = case_when(
+      mood1 == "No" ~ 0,
+      mood1 == "Depression" ~ 1
+    )
+  )
+
+full_data <- full_data %>% 
+  mutate(
+    mood1sev = case_when(
+      mood1sev == "No" ~ 0,
+      mood1 == "Depression" ~ 1
+    )
+  )
+
+
+```
+
+```{r}
+full_data <- full_data %>% select(-p1dlacta,-p1dlactb,-p1dlactc,-p1dlactd,-p1dlacte,-p1dlactf,-p1dlactg,-p1dlacth,-p1dlacti)
+
+full_data <- full_data %>% select(ID,sex,age_avg,soclass,isced97total,dlact_score,drink,smoke,mood1,mood1sev,p1illnes,p1cuhlth,p1mstat, everything())
+```
+
+# Data Discription
+
+## full_data
+
+```{r}
+head(full_data)
+```
+
+```{r}
+str(full_data)
+```
+
+```{r}
+dim(full_data)
+```
+
+```{r}
+glimpse(full_data)
+
+```
+
+## corplot for fulldata
+```{r}
+numeric_data <- full_data %>% select_if(is.numeric)
+
+correlation_matrix <- cor(numeric_data, method = "spearman", use = "complete.obs")
+
+corrplot(correlation_matrix, method = "circle")
+
+```
+
+```{r}
+ggcorrplot(correlation_matrix, lab = F)
+
+```
+
+```{r}
+correlation_matrix
+```
+
+## how many people smoke and drink
+
+```{r}
+
+smoking <- full_data %>% filter(smoke >= 1) %>% summarise(count = n())
+non_smoking <- full_data %>% filter(smoke == 0) %>% summarise(count = n())
+
+smoking;non_smoking
+
+drinking <- full_data %>% filter(drink >= 1) %>% summarise(count = n())
+non_drinking <- full_data %>% filter(drink < 1) %>% summarise(count = n())
+
+drinking;non_drinking
+
+smoke_and_drink <- full_data %>% filter(smoke >= 1, drink >= 1) %>% summarise(count = n())
+(smoke_and_drink$count / smoking$count) * 100 # What percentage of smokers drink alcohol?
+
+
+non_smoke_and_drink <- full_data %>% filter(smoke == 0, drink >= 1) %>% summarise(count = n())
+(non_smoke_and_drink$count / non_smoking$count) * 100 # # What percentage of non-smokers drink alcohol?
+
+```
+
+### chisq.test 
+
+```{r}
+full_data2 <- full_data
+
+full_data2$smoke <- factor(full_data2$smoke, 
+                          levels = c(0, 1, 2), 
+                          labels = c("Never", "Before_Smoker", "Still_Smoker"))
+
+
+full_data2$drink <- factor(full_data2$drink, 
+                          levels = c(0, 1, 2), 
+                          labels = c("Never", "Rarely", "Frequently"))
+
+table(full_data2$smoke, full_data2$drink)
+
+
+chisq.test(table(full_data2$smoke, full_data2$drink))
+
+
+```
+
+Since this p-value is much smaller than 0.05, the result is statistically significant. This indicates that there is a non-random association between smoking and alcohol use.
+
+### visual analyze
+
+```{r}
+
+smoke_drink_df <- as.data.frame(table(full_data2$smoke, full_data2$drink)
+)
+colnames(smoke_drink_df) <- c("Smoke", "Drink", "Count")
+
+
+ggplot(smoke_drink_df, aes(x = Smoke, y = Count, fill = Drink)) +
+    geom_bar(stat = "identity", position = "dodge") +
+    labs(title = "smoke and alcohol dist",
+         x = "smokeı",
+         y = "num of people") +
+    theme_minimal()
+```
+
+## smoke and alcohol effect on dlact score
+
+### regression model
+
+```{r}
+interaction_model <- lm(dlact_score ~ smoke * drink, data = full_data)
+summary(interaction_model)
+
+```
+
+drinkFrequently: p = 0.00288 Frequent drinkers have significantly lower DLact scores. Coefficient: -0.37981. This indicates that frequent alcohol consumption reduces DLact scores by approximately 0.38 units.
+
+### visual
+
+```{r}
+full_data %>%
+  filter(!is.na(smoke), !is.na(dlact_score), !is.na(drink)) %>%
+  ggplot(aes(x = factor(smoke), y = dlact_score, color = factor(drink))) +
+    geom_boxplot(outlier.shape = NA) +                                    
+    geom_jitter(size = 0.2, alpha = 0.2) +                                  
+    theme_minimal() +                                                       
+    theme(
+      legend.position = "right",                                           
+      plot.title = element_text(size = 12, face = "bold")
+    ) +
+    ggtitle("Smoking vs. DLact Score by Alcohol Consumption") +             
+    xlab("Smoking Status (0 = Non-smoker, 1 = Smoker)") +
+    ylab("DLact Score")
+
+```
+
+### anova and tukey test
+
+```{r}
+aov(dlact_score ~ smoke * drink, data = full_data2)
+summary(aov(dlact_score ~ smoke * drink, data = full_data2))
+
+TukeyHSD(aov(dlact_score ~ smoke * drink, data = full_data2))
+
+```
+
+Drink appears to have a significant impact on dlact_score, while smoke and the smoke:drink interaction do not seem to show significant effects.
+
+## dlact_score vs mood
+
+```{r}
+full_data$mood1 <- factor(full_data$mood1, levels = c("0","1"))
+
+
+chisq.test(table(full_data$mood1,full_data$dlact_score))
+```
+
+A p-value of < 2.2e-16 indicates that the p-value is much smaller than 0.05, meaning that the results are statistically significant.
+
+
+```{r}
+mosaicplot(table(full_data$mood1, full_data$dlact_score))
+
+```
+
+```{r}
+full_data %>%
+  filter(!is.na(mood1), !is.na(dlact_score)) %>%  
+  ggplot(aes(x = factor(mood1), y = dlact_score, fill = factor(mood1))) +
+    geom_boxplot() +        
+    geom_jitter(color = "black", size = 0.5, alpha = 0.6) +  
+    scale_fill_manual(values = c("#FF9999", "#9999FF")) +    
+    theme_minimal() +                                       
+    theme(
+      plot.title = element_text(size = 12, face = "bold"),
+      legend.position = "none"
+    ) +
+    ggtitle("DLact Score by Mood (0 and 1)") +
+    xlab("Mood (0 = Negative, 1 = Positive)") +
+    ylab("DLact Score")
+
+```
+
+
+```{r}
+anova_result <- aov(dlact_score ~ mood1, data = full_data)
+summary(anova_result)
+```
+## Education Level and Depression
+
+```{r}
+table(full_data$isced97total, full_data$mood1)
+
+full_data$mood1 <- as.numeric(full_data$mood1)
+
+
+anova_result <- aov(mood1 ~ isced97total, data = full_data)
+anova_result
+
+```
+
+```{r}
+ggplot(full_data, aes(x = isced97total, fill = factor(mood1))) +
+  geom_bar(position = "stack") +
+  labs(title = " Education Level and Depression",
+       x = "ISCED 97",
+       y = "frequence",
+       fill = "mood (0 = negative, 1 = positive)") +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+
+```
+
+## The Relationship Between Working Status and Mood (Emotional State)
+
+```{r}
+full_data %>%
+  filter(!is.na(p1curocc)) %>%
+  ggplot(aes(x = p1curocc, fill = factor(mood1))) +
+  geom_bar() +
+  labs(title = "The Relationship Between Working Status and Mood", 
+       x = "occ..", 
+       y = "Frequence",
+       fill = "Mood1") +
+  theme_minimal()
+```
+
+
