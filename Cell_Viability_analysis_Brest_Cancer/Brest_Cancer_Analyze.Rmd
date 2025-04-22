@@ -1,0 +1,513 @@
+---
+title: "Brest_Cancer_Analyze"
+author: "ky"
+date: "2025-04-19"
+output:
+  html_document:
+    toc: true
+    toc_float: true
+    toc_depth: 2
+    number_sections: true
+    code_folding: show
+    css: style.css
+---
+
+# Head
+
+## Load Required Libraries
+
+```{r message=FALSE, warning=FALSE}
+library(ggplot2)
+library(pheatmap)
+library(readxl)
+library(readr)
+library(tidyr)
+library(knitr)
+library(kableExtra)
+library(drc)
+library(dplyr)
+library(conflicted)
+
+
+conflict_prefer("select", "dplyr")
+conflict_prefer("filter", "dplyr")
+
+
+```
+
+## Load any required data files
+
+```{r setup, include=TRUE}
+knitr::opts_chunk$set(warning = FALSE, message = FALSE)
+# ️ Data Import
+# (Şu anda t24, t48 ve t72 aynı CSV'den geliyor. İleride farklı dosyalar kullanırsan değiştirebilirsin.)
+t24 <- as.data.frame(read_csv2("data/t24.csv", col_names = FALSE,show_col_types = FALSE))
+t48 <- as.data.frame(read_csv2("data/t48.csv", col_names = FALSE,show_col_types = FALSE))
+t72 <- as.data.frame(read_csv2("data/t72.csv", col_names = FALSE,show_col_types = FALSE))
+
+
+# Set Rows and Columns (Sabit 8x12 yapı)
+rows <- LETTERS[1:8]       # Satır isimleri: A–H
+cols <- as.character(1:12) # Sütun isimleri: 1–12
+rep_24 <- c(2, 4:11)
+rep_48 <- c(3:11)
+rep_72 <- c(3:11)
+
+# t24 <- t24 %>% relocate(X1, .after = everything())
+# t24 <- t24[-1,]
+# t24[,c(1,12)] <- NA
+# 
+# rownames(t24) <- rows
+# colnames(t24) <- cols
+# 
+# t48 <- t48 %>% relocate(X1, .after = everything())
+
+
+# Önceden 'rows' ve 'cols' vektörlerini tanımlamış olman gerekiyor:
+# Örnek:
+# rows <- paste0("row", 1:(nrow(df) - 1)) # Satır isimleri (bir satır silindiği için -1)
+# cols <- paste0("col", 1:12)             # 12 kolon ismi
+
+for (df_name in c("t24", "t48", "t72")) {
+  df <- get(df_name)
+  df <- df[, 1:12]
+  df <- df %>% relocate(X1, .after = everything())
+  df <- df[-1, ]
+  df[, c(1, 12)] <- NA
+  
+  #  rownames ve colnames üret
+  # rows <- paste0("row", 1:nrow(df))
+  # cols <- paste0("col", 1:12)
+  
+  rownames(df) <- 1:nrow(df)
+  colnames(df) <- 1:12
+  df <- as.matrix(df)
+  assign(df_name, df)
+}
+
+
+# böylelikle üc farklı datayı da aynı şekle sokmuş olduk
+#  Create Condition Matrix
+cond_matrix <- matrix(
+  data = "PBS",    # ilk ve son kuycuklar pbs
+  nrow = 8,
+  ncol = 12,
+  dimnames = list(rows, cols)
+)
+
+# Assign Drug Doses (A–E satırları, 3–11 sütunlar arası)
+dose_rows <- c("A", "B", "C", "D", "E")
+dose_values <- c("1 uM +C", "5 uM +C", "12.5 uM +C", "25 uM +C", "50 M +C")
+
+for (i in seq_along(dose_rows)) {
+  cond_matrix[dose_rows[i], 3:11] <- dose_values[i]
+}
+
+# Assign Special Controls
+cond_matrix[, 2]      <- "BLANK(-D, -dmso, -C)"             # 2. sütun: Blank kontrol
+cond_matrix["F", 3:11] <- "TRUE CONTROL(-D, -dmso, +C)"     # F satırı: True Control
+cond_matrix["G", 3:11] <- "DMSO EFFECT(-D, 0.1% dmso, +C)"  # G satırı: DMSO etkisi
+cond_matrix["H", 3:11] <- "DEATH DOSE(-D, 5% dmso, +C)"     # H satırı: Ölüm dozu
+
+# Clean environment (geçici objeleri sil)
+rm(rows, cols, dose_rows, dose_values, i)
+
+#  Create Empty 3D Array
+absorbance_array <- array(
+  NA, 
+  dim = c(nrow(cond_matrix), ncol(cond_matrix), 3),
+  dimnames = list(
+    rownames(cond_matrix),
+    colnames(cond_matrix),
+    c("absorbance_t24", "absorbance_t48", "absorbance_t72")
+  )
+)
+
+
+#  Array'e yerleştir
+absorbance_array[,, "absorbance_t24"] <- t24
+absorbance_array[,, "absorbance_t48"] <- t48
+absorbance_array[,, "absorbance_t72"] <- t72
+
+```
+
+## Functions
+
+```{r}
+get_outlier <- function(df, rf=1.5) {
+  # df = data frame rf = range factor, you can change the value that you rearrange upper and lower values.
+  vec <- as.vector(df)
+  wells <- as.vector(outer(rownames(df), colnames(df), paste0))
+  
+  vec_clean <- vec[!is.na(vec)]
+  Q1 <- quantile(vec_clean, 0.25)
+  Q3 <- quantile(vec_clean, 0.75)
+  IQR_val <- Q3 - Q1
+  lower <- Q1 - rf * IQR_val
+  upper <- Q3 + rf * IQR_val
+  
+  outlier_mask <- vec < lower | vec > upper
+  outlier_wells <- wells[outlier_mask]
+  boxplot(df)
+  # Uç değer yoksa 
+  if (length(outlier_wells) == 0) {
+    return("No outliers found")
+  } else {
+    return(outlier_wells)
+    
+  }
+  
+
+  
+}
+```
+
+```{r}
+make_outlier_NA <- function(df, rf = 1.5, exclude_wells = NULL) {
+  vec <- as.vector(df)
+  wells <- as.vector(outer(rownames(df), colnames(df), paste0))
+  
+  vec_clean <- vec[!is.na(vec)]
+  Q1 <- quantile(vec_clean, 0.25)
+  Q3 <- quantile(vec_clean, 0.75)
+  IQR_val <- Q3 - Q1
+  lower <- Q1 - rf * IQR_val
+  upper <- Q3 + rf * IQR_val
+  
+  outlier_mask <- vec < lower | vec > upper
+  
+  # Eğer exclude_wells varsa, onları outlier_mask içinden çıkar
+  if (!is.null(exclude_wells)) {
+    exclude_mask <- wells %in% exclude_wells
+    outlier_mask[exclude_mask] <- FALSE
+  }
+  
+  # Sonuç: sadece izin verilen uç değerler NA yapılacak
+  df[outlier_mask] <- NA
+  
+  return(df)
+}
+```
+
+```{r}
+
+get_well_addresses <- function(cond_matrix, condition_name) {
+  idx <- which(cond_matrix == condition_name, arr.ind = TRUE)
+  wells <- paste0(rownames(cond_matrix)[idx[, "row"]], colnames(cond_matrix)[idx[, "col"]])
+  return(wells)
+}
+
+```
+
+```{r}
+# averager <- function(df, start_col = 3, end_col = 11) {
+#   df <- as.data.frame(df)
+#   
+#   df <- df %>%
+#     mutate(mean_trial = rowMeans(select(., all_of(start_col:end_col)), na.rm = TRUE)) %>% 
+#     select(-all_of(start_col:end_col)) %>% 
+#     relocate(mean_trial, .after = start_col - 1) 
+#   
+#   df[[2]] <- mean(df[[2]], na.rm = TRUE)
+#   
+#   message("Remember to assign the result back if you want changes to persist!")
+#   
+#   df
+# }
+```
+
+```{r}
+averager_array <- function(mat, cond_matrix, condition_name) {
+  # 1. Kuyucuk adreslerini bul
+  wells_idx <- which(cond_matrix == condition_name, arr.ind = TRUE)
+  
+  # 2. Değerleri çek
+  values <- mat[cbind(wells_idx[, "row"], wells_idx[, "col"])]
+  
+  # 3. Ortalama al
+  mean_value <- mean(as.numeric(values), na.rm = TRUE)
+  
+  # 4. Seçilen tüm kuyucuklara ortalama değeri yaz
+  mat[cbind(wells_idx[, "row"], wells_idx[, "col"])] <- mean_value
+  
+  res <- print(paste("Mean value for", condition_name, "is", round(mean_value,4)))
+  return(mat)
+}
+
+
+```
+
+
+
+
+# Data Preprocessing
+
+## check for any NA value
+
+```{r}
+# Check for NA values in the data frame
+sum(is.na(absorbance_array))
+sum(is.na(absorbance_array[,2:11,]))
+
+```
+
+
+##check for any outlier
+
+```{r}
+# Check for outliers in the data frame
+outlier_list <- c(get_outlier(absorbance_array[,,"absorbance_t24"]))
+outlier_list <- c(outlier_list,get_outlier(absorbance_array[,,"absorbance_t48"]))
+outlier_list <- c(outlier_list,get_outlier(absorbance_array[,,"absorbance_t72"]))
+```
+
+## outlier check here
+
+```{r}
+# Check for outliers in the data frame
+outlier_list[!is.na(outlier_list)]
+```
+
+## summirising the array
+
+```{r}
+## Summarising the array
+
+
+# Ortalama alınacak koşullar
+conditions_to_average <- c(
+  "1 uM +C", 
+  "5 uM +C", 
+  "12.5 uM +C", 
+  "25 uM +C", 
+  "50 M +C", 
+  "TRUE CONTROL(-D, -dmso, +C)", 
+  "DMSO EFFECT(-D, 0.1% dmso, +C)",
+  "DEATH DOSE(-D, 5% dmso, +C)"
+)
+
+# 24h için averaging
+for (cond in conditions_to_average) {
+  absorbance_array[,,1] <- averager_array(absorbance_array[,,1], cond_matrix, cond)
+}
+
+# 48h için averaging
+for (cond in conditions_to_average) {
+  absorbance_array[,,2] <- averager_array(absorbance_array[,,2], cond_matrix, cond)
+}
+
+# 72h için averaging
+for (cond in conditions_to_average) {
+  absorbance_array[,,3] <- averager_array(absorbance_array[,,3], cond_matrix, cond)
+}
+
+```
+
+```{r}
+via_table <- as.data.frame(absorbance_array[, "3", ])
+#absorbance_array <- absorbance_array[, !colnames(absorbance_array) %in% rep_24, ]
+
+#via_table <- via_table %>% mutate(concentration = conditions_to_average) %>% select(concentration, everything())
+via_table <- via_table %>% 
+  mutate(concentration = conditions_to_average) %>% 
+  dplyr::select(concentration, dplyr::everything())
+
+```
+
+
+# Data Presentation
+
+
+```{r}
+
+via_table %>%
+  select(concentration, absorbance_t24, absorbance_t48, absorbance_t72) %>%
+  kable(
+    caption = "Table 1. Mean Absorbance Values at 24h, 48h, and 72h across Different Treatment Conditions",
+    col.names = c("Condition", "Absorbance (24h)", "Absorbance (48h)", "Absorbance (72h)"),
+    align = "c"
+  ) %>%
+  kable_styling(bootstrap_options = c("striped", "hover", "condensed"), full_width = FALSE)
+
+```
+
+```{r}
+ggplot(via_table, aes(x = concentration, y = absorbance_t24)) +
+  geom_bar(stat = "identity", fill = "skyblue") +
+  labs(title = "Mean Absorbance at 24h",
+       x = "Treatment Group",
+       y = "Mean Absorbance") +
+  theme_minimal(base_size = 14) +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+
+
+```
+
+```{r}
+ggplot(via_table, aes(x = concentration, y = absorbance_t48)) +
+  geom_bar(stat = "identity", fill = "skyblue") +
+  labs(title = "Mean Absorbance at 24h",
+       x = "Treatment Group",
+       y = "Mean Absorbance") +
+  theme_minimal(base_size = 14) +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+```
+
+```{r}
+ggplot(via_table, aes(x = concentration, y = absorbance_t72)) +
+  geom_bar(stat = "identity", fill = "skyblue") +
+  labs(title = "Mean Absorbance at 24h",
+       x = "Treatment Group",
+       y = "Mean Absorbance") +
+  theme_minimal(base_size = 14) +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+```
+
+
+# Cell Viability Calculation
+
+```{r}
+control_24h <- via_table %>% filter(concentration == "TRUE CONTROL(-D, -dmso, +C)") %>% pull(absorbance_t24)
+control_48h <- via_table %>% filter(concentration == "TRUE CONTROL(-D, -dmso, +C)") %>% pull(absorbance_t48)
+control_72h <- via_table %>% filter(concentration == "TRUE CONTROL(-D, -dmso, +C)") %>% pull(absorbance_t72)
+
+via_table <- via_table %>%
+  mutate(
+    viability_24h = (as.numeric(absorbance_t24) / control_24h) * 100,
+    viability_48h = (as.numeric(absorbance_t48) / control_48h) * 100,
+    viability_72h = (as.numeric(absorbance_t72) / control_72h) * 100
+  )
+
+```
+
+# Descriptive Analysis of Cell Viability
+
+```{r}
+
+viability_long <- via_table %>%
+  select(concentration, viability_24h, viability_48h, viability_72h) %>%
+  pivot_longer(
+    cols = starts_with("viability_"),
+    names_to = "timepoint",
+    values_to = "viability_percent"
+  ) %>%
+  mutate(
+    timepoint = recode(timepoint, 
+                       viability_24h = "24h", 
+                       viability_48h = "48h", 
+                       viability_72h = "72h"),
+    concentration = factor(concentration, 
+                            levels = c("1 uM +C", "5 uM +C", "12.5 uM +C", "25 uM +C", "50 M +C",
+                                       "TRUE CONTROL(-D, -dmso, +C)", 
+                                       "DMSO EFFECT(-D, 0.1% dmso, +C)", 
+                                       "DEATH DOSE(-D, 5% dmso, +C)"))
+  )
+```
+
+```{r}
+# Barplot: Concentration vs Viability
+ggplot(viability_long, aes(x = concentration, y = viability_percent, fill = timepoint)) +
+  geom_bar(stat = "identity", position = position_dodge(width = 0.8)) +
+  labs(title = "Cell Viability (%) by Dose and Timepoint",
+       x = "Concentration",
+       y = "Cell Viability (%)") +
+  scale_fill_brewer(palette = "Set2") +
+  theme_minimal(base_size = 14) +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+
+```
+
+```{r}
+# Eğer yapmadıysan, ekleyelim:
+viability_long <- viability_long %>%
+  mutate(
+    concentration_numeric = case_when(
+      concentration == "1 uM +C" ~ 1,
+      concentration == "5 uM +C" ~ 5,
+      concentration == "12.5 uM +C" ~ 12.5,
+      concentration == "25 uM +C" ~ 25,
+      concentration == "50 M +C" ~ 50,
+      TRUE ~ NA_real_
+    )
+  )
+
+viability_long <- viability_long %>% 
+  filter(!is.na(concentration_numeric))
+
+```
+
+```{r}
+ggplot(viability_long, aes(x = timepoint, y = viability_percent, group = concentration, color = concentration)) +
+  geom_line(size = 1.2) +
+  geom_point(size = 2.5) +
+  labs(
+    title = "Cell Viability (%) over Time by Dose",
+    x = "Timepoint (hours)",
+    y = "Cell Viability (%)",
+    color = "Concentration"
+  ) +
+  theme_minimal(base_size = 14) +
+  scale_color_brewer(palette = "Set1")
+
+```
+
+
+# IC 50 calculation and presentation
+
+
+```{r message=FALSE, warning=FALSE}
+calculate_ic50 <- function(viability_values, time_label = NULL) {
+  
+  # Başlığı otomatik üret
+  if (is.null(time_label)) {
+    time_label <- deparse(substitute(viability_values))
+  }
+  
+  # Veri
+  dose_viability <- data.frame(
+    dose = c(1, 5, 12.5, 25, 50),
+    viability = viability_values[1:5]
+  )
+  
+  # Model
+  drm_model <- drm(
+    viability ~ dose,
+    data = dose_viability,
+    fct = LL.4(names = c("Slope", "Lower", "Upper", "IC50"))
+  )
+  
+  # IC50 sonucu
+  ic50_result <- ED(drm_model, 50, interval = "delta")
+  
+  # Grafik
+  plot(drm_model,
+       main = paste("Dose-Response Curve -", time_label),
+       xlab = "Dose (uM)",
+       ylab = "Cell Viability (%)",
+       col = "blue",
+       lwd = 3,          # Çizgi kalınlığı artırıldı
+       cex = 1.5,        # Grafik genel boyutu büyütüldü
+       cex.axis = 1.2,   # Eksen yazıları büyütüldü
+       cex.lab = 1.4,    # Eksen etiketleri büyütüldü
+       cex.main = 1.6,   # Başlık büyütüldü
+       pch = 16,         # Nokta tipi (dolu daire)
+       col.points = "red" # Nokta rengi kırmızı
+  )
+  
+  return(ic50_result)
+}
+
+
+calculate_ic50(via_table$absorbance_t24[1:5])
+calculate_ic50(via_table$absorbance_t48[1:5])
+calculate_ic50(via_table$absorbance_t72[1:5])
+
+```
+
+
+# Normality Assessment of Experimental Data
+# Homogeneity of Variance Test
+# Comparison of Treated Groups Across Time and Dose
+# Post-hoc Multiple Comparisons
+# Dose-Response Relationship and IC50 Estimation
+# Data Visualization of Viability and Dose-Response
