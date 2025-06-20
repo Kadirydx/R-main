@@ -1,0 +1,7 @@
+"0","ggplot(via_table, aes(x = concentration, y = absorbance_t24)) +"
+"0","  geom_bar(stat = ""identity"", fill = ""skyblue"") +"
+"0","  labs(title = ""Mean Absorbance at 24h"","
+"0","       x = ""Treatment Group"","
+"0","       y = ""Mean Absorbance"") +"
+"0","  theme_minimal(base_size = 14) +"
+"0","  theme(axis.text.x = element_text(angle = 45, hjust = 1))"

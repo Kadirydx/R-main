@@ -1,0 +1,6 @@
+"0","source(""my_functions/get_outlier.R"")"
+"0","source(""data/condition_table.R"")"
+"0","read.csv(""delete/sample.csv"")"
+"2","Uyarı: dosya 'delete/sample.csv' açılamadı: No such file or directory"
+"2","Error in file(file, ""rt"") : bağlantı açılamadı
+"

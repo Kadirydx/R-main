@@ -1,0 +1,8 @@
+"0","via_table <- as.data.frame(absorbance_array[, ""3"", ])"
+"0","#absorbance_array <- absorbance_array[, !colnames(absorbance_array) %in% rep_24, ]"
+"0",""
+"0","#via_table <- via_table %>% mutate(concentration = conditions_to_average) %>% select(concentration, everything())"
+"0","via_table <- via_table %>% "
+"0","  mutate(concentration = conditions_to_average) %>% "
+"0","  dplyr::select(concentration, dplyr::everything())"
+"0",""

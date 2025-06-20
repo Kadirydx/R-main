@@ -1,0 +1,7 @@
+"0",""
+"0","get_well_addresses <- function(cond_matrix, condition_name) {"
+"0","  idx <- which(cond_matrix == condition_name, arr.ind = TRUE)"
+"0","  wells <- paste0(rownames(cond_matrix)[idx[, ""row""]], colnames(cond_matrix)[idx[, ""col""]])"
+"0","  return(wells)"
+"0","}"
+"0",""

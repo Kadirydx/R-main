@@ -1,0 +1,6 @@
+via_table_from_long_data <- function(long_data){
+  
+  long_data <- read.csv(file = paste("user_data/", long_data), header = TRUE)
+  return(long_data)
+  
+}
