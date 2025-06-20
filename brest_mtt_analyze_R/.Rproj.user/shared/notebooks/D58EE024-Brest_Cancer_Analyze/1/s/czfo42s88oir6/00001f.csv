@@ -1,0 +1,1 @@
+"0","outlier_list <- c(outlier_list,get_outlier(absorbance_array[,,""absorbance_t72""]))"

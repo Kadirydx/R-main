@@ -1,0 +1,7 @@
+"0","# Check for outliers in the data frame"
+"0","outlier_list[!is.na(outlier_list)]"
+"1","[1]"
+"1"," ""G6"""
+"1"," ""A5"""
+"1","
+"

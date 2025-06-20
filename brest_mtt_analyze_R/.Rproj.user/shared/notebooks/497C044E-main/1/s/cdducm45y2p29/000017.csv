@@ -1,0 +1,6 @@
+"0","# Outlier kuyucuklarını listele"
+"0","get_outlier(as.matrix(t24))"
+"1","[1]"
+"1"," ""No outliers found"""
+"1","
+"

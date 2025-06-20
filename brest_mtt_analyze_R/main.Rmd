@@ -1,0 +1,200 @@
+---
+title: "Brest MTT Analysis"
+author: "Kadir Yurdakul"
+date: "`r Sys.Date()`"
+output:
+  html_document:
+    toc: true
+    toc_float: true
+    toc_depth: 2
+    number_sections: true
+    code_folding: show
+    css: style.css
+---
+
+# 📦 Load Custom Functions
+
+```{r setup, include=TRUE}
+source("data/condition_table.R")
+# source("data/import_data.R") # (opsiyonel)
+```
+
+# Functions
+
+```{r}
+get_outlier <- function(df, rf=1.5) {
+  # df = data frame rf = range factor, you can change the value that you rearrange upper and lower values.
+  vec <- as.vector(df)
+  wells <- as.vector(outer(rownames(df), colnames(df), paste0))
+  
+  vec_clean <- vec[!is.na(vec)]
+  Q1 <- quantile(vec_clean, 0.25)
+  Q3 <- quantile(vec_clean, 0.75)
+  IQR_val <- Q3 - Q1
+  lower <- Q1 - rf * IQR_val
+  upper <- Q3 + rf * IQR_val
+  
+  outlier_mask <- vec < lower | vec > upper
+  outlier_wells <- wells[outlier_mask]
+  boxplot(df)
+  # Uç değer yoksa 
+  if (length(outlier_wells) == 0) {
+    return("No outliers found")
+  } else {
+    return(outlier_wells)
+    
+  }
+  
+
+  
+}
+```
+
+
+```{r}
+make_outlier_NA <- function(df, rf = 1.5, exclude_wells = NULL) {
+  vec <- as.vector(df)
+  wells <- as.vector(outer(rownames(df), colnames(df), paste0))
+  
+  vec_clean <- vec[!is.na(vec)]
+  Q1 <- quantile(vec_clean, 0.25)
+  Q3 <- quantile(vec_clean, 0.75)
+  IQR_val <- Q3 - Q1
+  lower <- Q1 - rf * IQR_val
+  upper <- Q3 + rf * IQR_val
+  
+  outlier_mask <- vec < lower | vec > upper
+  
+  # Eğer exclude_wells varsa, onları outlier_mask içinden çıkar
+  if (!is.null(exclude_wells)) {
+    exclude_mask <- wells %in% exclude_wells
+    outlier_mask[exclude_mask] <- FALSE
+  }
+  
+  # Sonuç: sadece izin verilen uç değerler NA yapılacak
+  df[outlier_mask] <- NA
+  
+  return(df)
+}
+```
+
+```{r}
+
+get_well_addresses <- function(cond_matrix, condition_name) {
+  idx <- which(cond_matrix == condition_name, arr.ind = TRUE)
+  wells <- paste0(rownames(cond_matrix)[idx[, "row"]], colnames(cond_matrix)[idx[, "col"]])
+  return(wells)
+}
+
+```
+
+
+```{r}
+averager <- function(df, start_col = 3, end_col = 11) {
+  df <- as.data.frame(df)
+  
+  df <- df %>%
+    mutate(mean_trial = rowMeans(select(., all_of(start_col:end_col)), na.rm = TRUE)) %>% 
+    select(-all_of(start_col:end_col)) %>% 
+    relocate(mean_trial, .after = start_col - 1) 
+  
+  df[[2]] <- mean(df[[2]], na.rm = TRUE)
+  
+  message("Remember to assign the result back if you want changes to persist!")
+  
+  df
+}
+```
+
+# load the libraries
+
+```{r}
+library(ggplot2)
+library(dplyr)
+library(pheatmap)
+library(readxl)
+library(readr)
+library(tidyr)
+
+```
+
+# read the data
+
+```{r}
+# 24h datasını oku
+t24 <- as.data.frame(read_csv2("data/t24.csv"))
+
+
+```
+
+# data preprocessing
+
+```{r}
+# İlk sütunu (muhtemelen boş ID kolonu) kaldır
+t24 <- t24[, -1]
+
+# Satır isimlerini A–H olarak ayarla
+rownames(t24) <- LETTERS[1:8]
+
+# İlk hali
+head(t24)
+
+```
+
+
+# get outlier values
+
+```{r}
+# Outlier kuyucuklarını listele
+get_outlier(as.matrix(t24))
+
+```
+
+# take the trial averages
+```{r}
+# Mean hesapla ve veriyi güncelle
+averager(t24, start_col = 3, end_col = 11)
+
+```
+
+# data presentation 
+
+```{r}
+# T24 datasını göster
+t24
+
+# (Eğer t48 ve t72 de okunduysa, onları da ekleyebilirsin)
+# t48
+# t72
+
+```
+
+# cell viabilities
+
+```{r}
+
+# 24h, 48h, 72h datası için Viability Tablosu Fonksiyonu
+make_viability_table <- function(df1, df2, df3) {
+  
+  # Burada önce blank correction ve viability hesaplamalarını yapman gerekir.
+  # Fonksiyon gövdesi şimdilik boş bırakılmış.
+
+  # Şu anlık sadece template:
+  full_df <- data.frame(
+    Concentration_uM = concentrations_numeric,
+    Treated_24h = round(treated_24h, 4),
+    Control_24h = round(rep(control_24h, 5), 4),
+    Treated_48h = round(treated_48h, 4),
+    Control_48h = round(rep(control_48h, 5), 4),
+    Treated_72h = round(treated_72h, 4),
+    Control_72h = round(rep(control_72h, 5), 4),
+    Viability_24h_percent = round(viability_24h, 2),
+    Viability_48h_percent = round(viability_48h, 2),
+    Viability_72h_percent = round(viability_72h, 2)
+  )
+
+  return(full_df)
+}
+
+```
+
