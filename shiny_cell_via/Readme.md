@@ -16,4 +16,4 @@ This interactive web application is built with R and Shiny to streamline the pro
 * **Condition Mapping:** Features a dedicated module and dynamic UI grid to map specific experimental conditions to plate layouts.
 * **Modular Architecture:** The backend logic relies on custom, modularized functions (e.g., `extract_abs_data.R`, `get_outlier_mask.R`) for maintainable and clean code.
 
-# dev notes: need to improve..
+* dev notes: need to improve..
