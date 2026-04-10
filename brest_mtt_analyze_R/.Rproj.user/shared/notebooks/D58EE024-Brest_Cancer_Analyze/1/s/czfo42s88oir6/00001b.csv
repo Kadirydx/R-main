@@ -1,2 +1,0 @@
-"0","# Check for outliers in the data frame"
-"0","outlier_list <- c(get_outlier(absorbance_array[,,""absorbance_t24""]))"
